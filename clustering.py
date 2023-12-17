@@ -174,9 +174,14 @@ def run_kmeans(x, nmb_clusters, verbose=False):
     index = faiss.GpuIndexFlatL2(res, d, flat_config)
 
     # perform the training
+    #print('===============',x)
     clus.train(x, index)
     _, I = index.search(x, 1)
-    losses = faiss.vector_to_array(clus.obj)
+    #losses = faiss.vector_to_array(clus.obj)
+    stats = clus.iteration_stats
+    losses = np.array([
+        stats.at(i).obj for i in range(stats.size())
+    ])
     if verbose:
         print('k-means loss evolution: {0}'.format(losses))
 
@@ -203,7 +208,7 @@ class Kmeans(object):
                 x_data (np.array N * dim): data to cluster
         """
         end = time.time()
-
+        # print('=============', data)
         # PCA-reducing, whitening and L2-normalization
         xb = preprocess_features(data)
 

@@ -47,11 +47,11 @@ def parse_args():
                         reassignments of clusters (default: 1)""")
     parser.add_argument('--workers', default=4, type=int,
                         help='number of data loading workers (default: 4)')
-    parser.add_argument('--epochs', type=int, default=200,
+    parser.add_argument('--epochs', type=int, default=500,
                         help='number of total epochs to run (default: 200)')
     parser.add_argument('--start_epoch', default=0, type=int,
                         help='manual epoch number (useful on restarts) (default: 0)')
-    parser.add_argument('--batch', default=256, type=int,
+    parser.add_argument('--batch', default=32, type=int,
                         help='mini-batch size (default: 256)')
     parser.add_argument('--momentum', default=0.9, type=float, help='momentum (default: 0.9)')
     parser.add_argument('--resume', default='', type=str, metavar='PATH',
@@ -96,13 +96,15 @@ def main(args):
         if os.path.isfile(args.resume):
             print("=> loading checkpoint '{}'".format(args.resume))
             checkpoint = torch.load(args.resume)
-            args.start_epoch = checkpoint['epoch']
+            # args.start_epoch = checkpoint['epoch']
             # remove top_layer parameters from checkpoint
-            for key in checkpoint['state_dict']:
+            keys = checkpoint['state_dict'].copy()
+            
+            for key in keys:
                 if 'top_layer' in key:
                     del checkpoint['state_dict'][key]
             model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
+            #optimizer.load_state_dict(checkpoint['optimizer'])
             print("=> loaded checkpoint '{}' (epoch {})"
                   .format(args.resume, checkpoint['epoch']))
         else:
@@ -137,7 +139,7 @@ def main(args):
 
     # clustering algorithm to use
     deepcluster = clustering.__dict__[args.clustering](args.nmb_cluster)
-
+    print("start training")
     # training convnet with DeepCluster
     for epoch in range(args.start_epoch, args.epochs):
         end = time.time()
@@ -148,7 +150,7 @@ def main(args):
 
         # get the features for the whole dataset
         features = compute_features(dataloader, model, len(dataset))
-
+        #print('++++++', features)
         # cluster the features
         if args.verbose:
             print('Cluster the features')
@@ -259,15 +261,20 @@ def train(loader, model, crit, opt, epoch):
                 'optimizer' : opt.state_dict()
             }, path)
 
-        target = target.cuda(async=True)
+        target = target.cuda(non_blocking=True)
         input_var = torch.autograd.Variable(input_tensor.cuda())
         target_var = torch.autograd.Variable(target)
 
         output = model(input_var)
         loss = crit(output, target_var)
 
+        #print('output',output)
+        #print('target_var',target_var)
+        #print('loss',loss)
         # record loss
-        losses.update(loss.data[0], input_tensor.size(0))
+        #losses.update(loss.data[0], input_tensor.size(0))
+        losses.update(loss.data, input_tensor.size(0))
+
 
         # compute gradient and do SGD step
         opt.zero_grad()
@@ -298,9 +305,14 @@ def compute_features(dataloader, model, N):
     model.eval()
     # discard the label information in the dataloader
     for i, (input_tensor, _) in enumerate(dataloader):
+        #print('input tensor is ', input_tensor.size())
         input_var = torch.autograd.Variable(input_tensor.cuda(), volatile=True)
+        #aux, aux0, aux1 = model(input_var)
+        #aux = aux.data.cpu().numpy()
+        #aux0 = aux0.data.cpu().numpy() 
+        #aux1 = aux1.data.cpu().numpy()  
         aux = model(input_var).data.cpu().numpy()
-
+        #print('=== aux is', aux)#, aux0, aux1, aux.shape)
         if i == 0:
             features = np.zeros((N, aux.shape[1]), dtype='float32')
 
