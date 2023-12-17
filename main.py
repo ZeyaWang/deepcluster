@@ -149,7 +149,7 @@ def main(args):
         model.classifier = nn.Sequential(*list(model.classifier.children())[:-1])
 
         # get the features for the whole dataset
-        features = compute_features(dataloader, model, len(dataset))
+        features, labels = compute_features(dataloader, model, len(dataset))
         #print('++++++', features)
         # cluster the features
         if args.verbose:
@@ -199,7 +199,11 @@ def main(args):
                     clustering.arrange_clustering(deepcluster.images_lists),
                     clustering.arrange_clustering(cluster_log.data[-1])
                 )
+                estimates = clustering.arrange_clustering(deepcluster.images_lists)
                 print('NMI against previous assignment: {0:.3f}'.format(nmi))
+                nmi2 = normalized_mutual_info_score(labels, estimates)
+                print('NMI against truths: {0:.3f}'.format(nmi2))
+                np.savez('output_{}.npz'.format(epoch), features=features, estimates=estimates, labels=labels)
             except IndexError:
                 pass
             print('####################### \n')
@@ -303,14 +307,11 @@ def compute_features(dataloader, model, N):
     batch_time = AverageMeter()
     end = time.time()
     model.eval()
+    labels = []
     # discard the label information in the dataloader
-    for i, (input_tensor, _) in enumerate(dataloader):
+    for i, (input_tensor, label) in enumerate(dataloader):
         #print('input tensor is ', input_tensor.size())
         input_var = torch.autograd.Variable(input_tensor.cuda(), volatile=True)
-        #aux, aux0, aux1 = model(input_var)
-        #aux = aux.data.cpu().numpy()
-        #aux0 = aux0.data.cpu().numpy() 
-        #aux1 = aux1.data.cpu().numpy()  
         aux = model(input_var).data.cpu().numpy()
         #print('=== aux is', aux)#, aux0, aux1, aux.shape)
         if i == 0:
@@ -331,7 +332,10 @@ def compute_features(dataloader, model, N):
             print('{0} / {1}\t'
                   'Time: {batch_time.val:.3f} ({batch_time.avg:.3f})'
                   .format(i, len(dataloader), batch_time=batch_time))
-    return features
+
+        labels.append(label.numpy())
+    labels = np.concatenate(labels, axis=0)
+    return features, labels
 
 
 if __name__ == '__main__':
